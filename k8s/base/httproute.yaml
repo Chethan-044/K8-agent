@@ -37,4 +37,4 @@ spec:
             value: /
       backendRefs:
         - name: k8s-agent-frontend
-          port: 5173
+          port: 80

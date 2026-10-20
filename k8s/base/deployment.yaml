@@ -24,8 +24,8 @@ spec:
       serviceAccountName: k8s-agent-sa
       containers:
         - name: backend
-          image: k8s-agent/backend:latest
-          imagePullPolicy: IfNotPresent
+          image: k8s-agent/backend
+          imagePullPolicy: Always
           ports:
             - containerPort: 3001
               protocol: TCP
@@ -117,10 +117,10 @@ spec:
     spec:
       containers:
         - name: frontend
-          image: k8s-agent/frontend:latest
-          imagePullPolicy: IfNotPresent
+          image: k8s-agent/frontend
+          imagePullPolicy: Always
           ports:
-            - containerPort: 5173
+            - containerPort: 80
               protocol: TCP
           env:
             - name: NODE_ENV
@@ -135,12 +135,12 @@ spec:
           readinessProbe:
             httpGet:
               path: /
-              port: 5173
+              port: 80
             initialDelaySeconds: 5
             periodSeconds: 5
           livenessProbe:
             httpGet:
               path: /
-              port: 5173
+              port: 80
             initialDelaySeconds: 10
             periodSeconds: 10
