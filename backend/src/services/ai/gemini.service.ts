@@ -290,12 +290,31 @@ export async function testApiKey(
         { model: cfg.modelName },
         Object.keys(reqOpts).length > 0 ? reqOpts : undefined
       );
-      await model.generateContent('Respond with exactly: OK');
+
+      // Use AbortController to enforce a 15-second timeout.
+      // Without this, if the pod can't reach Google's API (DNS/network),
+      // the request hangs until the ALB kills it → 502.
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 15000);
+      try {
+        await model.generateContent({
+          contents: [{ role: 'user', parts: [{ text: 'Respond with exactly: OK' }] }],
+        } as any);
+      } finally {
+        clearTimeout(timeout);
+      }
+
       return { valid: true, model: cfg.modelName, provider: 'Google Gemini' };
     } catch (err: any) {
       logger.warn(`Gemini API test failed: ${err.message}`);
       let errorMsg = err.message || 'Invalid API key or Gemini service unavailable';
-      if (err.message?.includes('API_KEY_INVALID')) {
+      if (err.name === 'AbortError' || err.message?.includes('abort')) {
+        errorMsg = 'Connection to Gemini API timed out. Check if the pod has internet/egress access.';
+      } else if (err.message?.includes('ENOTFOUND') || err.message?.includes('getaddrinfo')) {
+        errorMsg = 'Cannot resolve generativelanguage.googleapis.com — check DNS and network egress from the pod.';
+      } else if (err.message?.includes('ECONNREFUSED') || err.message?.includes('ETIMEDOUT') || err.message?.includes('ECONNRESET')) {
+        errorMsg = 'Network connection to Gemini API failed. Ensure the pod has outbound internet access (NAT Gateway/egress).';
+      } else if (err.message?.includes('API_KEY_INVALID')) {
         errorMsg = 'Invalid Gemini API key';
       } else if (err.message?.includes('RATE_LIMIT')) {
         errorMsg = 'Rate limit exceeded. Please try again later.';

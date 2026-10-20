@@ -14,6 +14,10 @@ metadata:
   namespace: k8s-agent
   labels:
     app.kubernetes.io/name: k8s-agent
+  annotations:
+    # Increase backend response timeout for AI analysis endpoints
+    # which call external APIs (Gemini/OpenAI) and can take 30-60s
+    alb.ingress.kubernetes.io/target-group-attributes: idle_timeout.timeout_seconds=120
 spec:
   parentRefs:
     - name: app-alb-gateway

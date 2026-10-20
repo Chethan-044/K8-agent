@@ -1,7 +1,7 @@
 # ============================================================
 # Stage 1: Build — compile TypeScript & install all dependencies
 # ============================================================
-FROM node:22-alpine AS builder
+FROM node:20-alpine AS builder
 
 # better-sqlite3 requires native build tools
 RUN apk add --no-cache python3 make g++
@@ -9,6 +9,11 @@ RUN apk add --no-cache python3 make g++
 WORKDIR /app
 
 COPY package*.json ./
+
+# Point node-gyp to use locally installed Node.js headers
+# to avoid downloading from unofficial-builds.nodejs.org (which can timeout)
+ENV npm_config_nodedir=/usr/local
+
 RUN npm ci
 
 COPY tsconfig.json ./
@@ -23,7 +28,7 @@ RUN npm prune --production
 # ============================================================
 # Stage 2: Production — minimal runtime image
 # ============================================================
-FROM node:22-alpine
+FROM node:20-alpine
 
 WORKDIR /app
 
@@ -38,3 +43,4 @@ RUN mkdir -p /app/data
 EXPOSE 3001
 
 CMD ["node", "dist/server.js"]
+
