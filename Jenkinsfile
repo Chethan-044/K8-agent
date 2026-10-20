@@ -102,7 +102,7 @@ pipeline {
                       "s|image: *[^[:space:]]*k8s-agent-frontend:[^[:space:]]*|image: ${FRONTEND_IMAGE}:${IMAGE_TAG}|" \
                       k8/deployment.yaml
 
-                    grep -n 'image:' k8/deployment.yaml
+                    grep -n 'image:' k8/base/deployment.yaml
                 '''
             }
         }
