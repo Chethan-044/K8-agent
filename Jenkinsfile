@@ -87,25 +87,33 @@ pipeline {
             }
         }
 
+        
         stage('Update Kubernetes Image Tags') {
             steps {
                 sh '''
                     set -eu
-
-                    test -f k8s/base/deployment.yaml
-
+        
+                    FILE="k8s/base/deployment.yaml"
+        
+                    test -f "$FILE"
+        
                     sed -i -E \
-                      "s|image: *[^[:space:]]*k8s-agent-backend:[^[:space:]]*|image: ${BACKEND_IMAGE}:${IMAGE_TAG}|" \
-                      k8/deployment.yaml
-
+                      's|image: *k8s-agent/backend(:[^[:space:]]*)?$|image: chtnnn/k8s-agent-backend:'"$BUILD_NUMBER"'|' \
+                      "$FILE"
+        
                     sed -i -E \
-                      "s|image: *[^[:space:]]*k8s-agent-frontend:[^[:space:]]*|image: ${FRONTEND_IMAGE}:${IMAGE_TAG}|" \
-                      k8/deployment.yaml
-
-                    grep -n 'image:' k8s/base/deployment.yaml
+                      's|image: *k8s-agent/frontend(:[^[:space:]]*)?$|image: chtnnn/k8s-agent-frontend:'"$BUILD_NUMBER"'|' \
+                      "$FILE"
+        
+                    echo "Updated image references:"
+                    grep -n 'image:' "$FILE"
+        
+                    grep -q 'image: chtnnn/k8s-agent-backend:'"$BUILD_NUMBER" "$FILE"
+                    grep -q 'image: chtnnn/k8s-agent-frontend:'"$BUILD_NUMBER" "$FILE"
                 '''
             }
         }
+
 
         stage('Commit and Push Manifest Changes') {
             steps {
