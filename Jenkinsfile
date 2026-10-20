@@ -92,7 +92,7 @@ pipeline {
                 sh '''
                     set -eu
 
-                    test -f k8/deployment.yaml
+                    test -f k8s/base/deployment.yaml
 
                     sed -i -E \
                       "s|image: *[^[:space:]]*k8s-agent-backend:[^[:space:]]*|image: ${BACKEND_IMAGE}:${IMAGE_TAG}|" \
