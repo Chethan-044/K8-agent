@@ -24,7 +24,7 @@ spec:
       serviceAccountName: k8s-agent-sa
       containers:
         - name: backend
-          image: chtnnn/k8s-agent-backend:10
+          image: chtnnn/agent-k8:backend-latest
           imagePullPolicy: Always
           ports:
             - containerPort: 3001
@@ -115,7 +115,7 @@ spec:
     spec:
       containers:
         - name: frontend
-          image: chtnnn/k8s-agent-frontend:10
+          image: chtnnn/agent-k8:frontend-latest
           imagePullPolicy: Always
           ports:
             - containerPort: 80
