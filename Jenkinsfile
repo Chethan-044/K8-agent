@@ -115,6 +115,7 @@ pipeline {
         }
 
 
+
         stage('Commit and Push Manifest Changes') {
             steps {
                 withCredentials([
@@ -126,34 +127,34 @@ pipeline {
                 ]) {
                     sh '''
                         set -eu
-                        set +x
-
+        
                         git config user.name "Jenkins"
                         git config user.email "jenkins@example.com"
-
-                        git add k8/deployment.yaml
-
+        
+                        git add k8s/base/deployment.yaml
+        
                         if git diff --cached --quiet; then
                             echo "No manifest changes to commit."
                             exit 0
                         fi
-
-                        git commit -m "Update K8-Agent images to build ${IMAGE_TAG}"
-
+        
+                        git commit -m "ci: update K8-Agent images to build ${BUILD_NUMBER}"
+        
                         REPO_URL=$(git config --get remote.origin.url)
                         REPO_PATH=${REPO_URL#https://github.com/}
                         REPO_PATH=${REPO_PATH#http://github.com/}
                         REPO_PATH=${REPO_PATH%.git}
-
+        
                         git remote set-url origin \
                           "https://${GIT_USER}:${GIT_TOKEN}@github.com/${REPO_PATH}.git"
-
-                        git push origin HEAD
+        
+                        BRANCH="${BRANCH_NAME:-main}"
+                        git push origin "HEAD:${BRANCH}"
                     '''
                 }
             }
         }
-    }
+
 
     post {
         success {
