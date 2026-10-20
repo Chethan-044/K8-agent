@@ -5,8 +5,8 @@ pipeline {
     parameters {
         string(
             name: 'DOCKERHUB_USERNAME',
-            defaultValue: '',
-            description: 'Enter your Docker Hub username'
+            defaultValue: 'chtnnn',
+            description: 'Docker Hub username'
         )
     }
 
@@ -14,22 +14,26 @@ pipeline {
         BACKEND_IMAGE  = "${params.DOCKERHUB_USERNAME}/k8s-agent-backend"
         FRONTEND_IMAGE = "${params.DOCKERHUB_USERNAME}/k8s-agent-frontend"
         IMAGE_TAG      = "${BUILD_NUMBER}"
+        MANIFEST_FILE  = "k8s/base/deployment.yaml"
     }
 
     stages {
-        stage('Validate Parameters') {
-            steps {
-                script {
-                    if (!params.DOCKERHUB_USERNAME?.trim()) {
-                        error('Docker Hub username is required.')
-                    }
-                }
-            }
-        }
-
         stage('Checkout Source') {
             steps {
                 checkout scm
+            }
+        }
+
+        stage('Validate') {
+            steps {
+                sh '''
+                    set -eu
+                    test -d backend
+                    test -d frontend
+                    test -f "$MANIFEST_FILE"
+                    test -f backend/Dockerfile
+                    test -f frontend/Dockerfile
+                '''
             }
         }
 
@@ -37,23 +41,21 @@ pipeline {
             parallel {
                 stage('Build Backend') {
                     steps {
-                        dir('backend') {
-                            sh '''
-                                docker build \
-                                  -t "$BACKEND_IMAGE:$IMAGE_TAG" .
-                            '''
-                        }
+                        sh '''
+                            docker build \
+                              -t "$BACKEND_IMAGE:$IMAGE_TAG" \
+                              ./backend
+                        '''
                     }
                 }
 
                 stage('Build Frontend') {
                     steps {
-                        dir('frontend') {
-                            sh '''
-                                docker build \
-                                  -t "$FRONTEND_IMAGE:$IMAGE_TAG" .
-                            '''
-                        }
+                        sh '''
+                            docker build \
+                              -t "$FRONTEND_IMAGE:$IMAGE_TAG" \
+                              ./frontend
+                        '''
                     }
                 }
             }
@@ -70,9 +72,8 @@ pipeline {
                 ]) {
                     sh '''
                         set +x
-                        echo "$DH_TOKEN" | docker login \
-                          --username "$DH_USER" \
-                          --password-stdin
+                        printf '%s' "$DH_TOKEN" |
+                            docker login -u "$DH_USER" --password-stdin
                     '''
                 }
             }
@@ -81,40 +82,36 @@ pipeline {
         stage('Push Images to Docker Hub') {
             steps {
                 sh '''
+                    set -eu
                     docker push "$BACKEND_IMAGE:$IMAGE_TAG"
                     docker push "$FRONTEND_IMAGE:$IMAGE_TAG"
                 '''
             }
         }
 
-        
         stage('Update Kubernetes Image Tags') {
             steps {
                 sh '''
                     set -eu
-        
-                    FILE="k8s/base/deployment.yaml"
-        
-                    test -f "$FILE"
-        
+
+                    test -f "$MANIFEST_FILE"
+
                     sed -i -E \
-                      's|image: *k8s-agent/backend(:[^[:space:]]*)?$|image: chtnnn/k8s-agent-backend:'"$BUILD_NUMBER"'|' \
-                      "$FILE"
-        
+                      's|image: *k8s-agent/backend(:[^[:space:]]*)?$|image: '"$BACKEND_IMAGE:$IMAGE_TAG"'|' \
+                      "$MANIFEST_FILE"
+
                     sed -i -E \
-                      's|image: *k8s-agent/frontend(:[^[:space:]]*)?$|image: chtnnn/k8s-agent-frontend:'"$BUILD_NUMBER"'|' \
-                      "$FILE"
-        
-                    echo "Updated image references:"
-                    grep -n 'image:' "$FILE"
-        
-                    grep -q 'image: chtnnn/k8s-agent-backend:'"$BUILD_NUMBER" "$FILE"
-                    grep -q 'image: chtnnn/k8s-agent-frontend:'"$BUILD_NUMBER" "$FILE"
+                      's|image: *k8s-agent/frontend(:[^[:space:]]*)?$|image: '"$FRONTEND_IMAGE:$IMAGE_TAG"'|' \
+                      "$MANIFEST_FILE"
+
+                    echo "Updated images:"
+                    grep -n 'image:' "$MANIFEST_FILE"
+
+                    grep -Fq "image: $BACKEND_IMAGE:$IMAGE_TAG" "$MANIFEST_FILE"
+                    grep -Fq "image: $FRONTEND_IMAGE:$IMAGE_TAG" "$MANIFEST_FILE"
                 '''
             }
         }
-
-
 
         stage('Commit and Push Manifest Changes') {
             steps {
@@ -127,39 +124,35 @@ pipeline {
                 ]) {
                     sh '''
                         set -eu
-        
+
                         git config user.name "Jenkins"
                         git config user.email "jenkins@example.com"
-        
-                        git add k8s/base/deployment.yaml
-        
+
+                        git add "$MANIFEST_FILE"
+
                         if git diff --cached --quiet; then
                             echo "No manifest changes to commit."
                             exit 0
                         fi
-        
-                        git commit -m "ci: update K8-Agent images to build ${BUILD_NUMBER}"
-        
-                        REPO_URL=$(git config --get remote.origin.url)
-                        REPO_PATH=${REPO_URL#https://github.com/}
-                        REPO_PATH=${REPO_PATH#http://github.com/}
-                        REPO_PATH=${REPO_PATH%.git}
-        
+
+                        git commit -m "ci: update K8-Agent images to build $IMAGE_TAG"
+
+                        REPO_PATH="Chethan-044/K8-agent"
+                        BRANCH="main"
+
                         git remote set-url origin \
                           "https://${GIT_USER}:${GIT_TOKEN}@github.com/${REPO_PATH}.git"
-        
-                        BRANCH="${BRANCH_NAME:-main}"
+
                         git push origin "HEAD:${BRANCH}"
                     '''
                 }
             }
         }
-
+    }
 
     post {
         success {
-            echo "Build #${IMAGE_TAG}: images pushed and Kubernetes manifests updated in Git."
-            echo "Argo CD can now sync the new image tags."
+            echo 'Pipeline succeeded. Argo CD can now sync the updated manifests.'
         }
 
         failure {
@@ -168,9 +161,9 @@ pipeline {
 
         always {
             sh '''
-                docker rmi "$BACKEND_IMAGE:$IMAGE_TAG" || true
-                docker rmi "$FRONTEND_IMAGE:$IMAGE_TAG" || true
-                docker logout || true
+                docker logout >/dev/null 2>&1 || true
+                docker rmi "$BACKEND_IMAGE:$IMAGE_TAG" >/dev/null 2>&1 || true
+                docker rmi "$FRONTEND_IMAGE:$IMAGE_TAG" >/dev/null 2>&1 || true
             '''
         }
     }
