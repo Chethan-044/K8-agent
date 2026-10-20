@@ -1,0 +1,40 @@
+###############################################################################
+# HTTPRoute — routes traffic through the ALB Gateway
+#
+# Routing logic:
+#   /api/*  → k8s-agent-backend:3001
+#   /*      → k8s-agent-frontend:5173
+#
+# Replace the hostname with your actual domain.
+###############################################################################
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: k8s-agent
+  namespace: k8s-agent
+  labels:
+    app.kubernetes.io/name: k8s-agent
+spec:
+  parentRefs:
+    - name: app-alb-gateway
+      namespace: default
+  hostnames:
+    - "k8s-agent.chethnnn.me"    # ← Replace with your actual domain
+  rules:
+    # Rule 1: Backend API traffic  →  /api/*
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /api
+      backendRefs:
+        - name: k8s-agent-backend
+          port: 3001
+
+    # Rule 2: Everything else  →  Frontend
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: k8s-agent-frontend
+          port: 5173

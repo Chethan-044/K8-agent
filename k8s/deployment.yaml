@@ -1,0 +1,146 @@
+###############################################################################
+# Backend Deployment
+###############################################################################
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: k8s-agent-backend
+  namespace: k8s-agent
+  labels:
+    app.kubernetes.io/name: k8s-agent
+    app.kubernetes.io/component: backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: k8s-agent
+      app.kubernetes.io/component: backend
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: k8s-agent
+        app.kubernetes.io/component: backend
+    spec:
+      serviceAccountName: k8s-agent-sa
+      containers:
+        - name: backend
+          image: k8s-agent/backend:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 3001
+              protocol: TCP
+          env:
+            - name: NODE_ENV
+              value: "production"
+            - name: PORT
+              value: "3001"
+            - name: CORS_ORIGIN
+              value: "https://k8s-agent.chethnnn.me"
+            - name: DATA_DIR
+              value: "/app/data"
+            - name: SESSION_SECRET
+              value: "change-this-in-production-k8s-agent-secret"
+            - name: GEMINI_MODEL
+              value: "gemini-flash-latest"
+            - name: LOG_TAIL_LINES
+              value: "300"
+          volumeMounts:
+            - name: data
+              mountPath: /app/data
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 3001
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 3001
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            failureThreshold: 3
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: k8s-agent-data
+---
+###############################################################################
+# Backend PVC — SQLite persistent storage
+###############################################################################
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: k8s-agent-data
+  namespace: k8s-agent
+  labels:
+    app.kubernetes.io/name: k8s-agent
+    app.kubernetes.io/component: backend
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+
+###############################################################################
+# Frontend Deployment
+###############################################################################
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: k8s-agent-frontend
+  namespace: k8s-agent
+  labels:
+    app.kubernetes.io/name: k8s-agent
+    app.kubernetes.io/component: frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: k8s-agent
+      app.kubernetes.io/component: frontend
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: k8s-agent
+        app.kubernetes.io/component: frontend
+    spec:
+      containers:
+        - name: frontend
+          image: k8s-agent/frontend:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 5173
+              protocol: TCP
+          env:
+            - name: NODE_ENV
+              value: "production"
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 5173
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 5173
+            initialDelaySeconds: 10
+            periodSeconds: 10

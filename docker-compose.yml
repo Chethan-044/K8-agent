@@ -1,0 +1,41 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3001"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      # Kubeconfig mount (read-only, works on Linux, macOS, and Windows)
+      - ${HOME:-${USERPROFILE}}/.kube:/root/.kube:ro
+      # Persistent SQLite volume
+      - k8s-agent-data:/app/data
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - CORS_ORIGIN=http://localhost:5173
+      - DATA_DIR=/app/data
+      - SESSION_SECRET=${SESSION_SECRET:-change-this-in-production-k8s-agent-secret}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-flash-latest}
+      - K8S_HOST_OVERRIDE=${K8S_HOST_OVERRIDE:-host.docker.internal}
+      - LOG_TAIL_LINES=${LOG_TAIL_LINES:-300}
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+    environment:
+      - NODE_ENV=production
+    restart: unless-stopped
+
+volumes:
+  k8s-agent-data:
+
+

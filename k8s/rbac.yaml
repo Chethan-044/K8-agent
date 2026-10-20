@@ -1,0 +1,85 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: k8s-agent-sa
+  namespace: k8s-agent
+  labels:
+    app.kubernetes.io/name: k8s-agent
+    app.kubernetes.io/part-of: k8s-agent
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: k8s-agent-readonly
+  labels:
+    app.kubernetes.io/name: k8s-agent
+rules:
+  # Core workloads and logging (Read-Only)
+  # NOTE: Strictly excludes 'secrets' to prevent any secret data leakage
+  # NOTE: Strictly excludes 'configmaps' data reading
+  - apiGroups: [""]
+    resources:
+      - pods
+      - pods/log
+      - pods/status
+      - events
+      - services
+      - endpoints
+      - persistentvolumeclaims
+      - persistentvolumes
+      - namespaces
+    verbs: ["get", "list", "watch"]
+
+  # Nodes inspection (Read-Only capacity, conditions, runtime)
+  - apiGroups: [""]
+    resources:
+      - nodes
+      - nodes/status
+    verbs: ["get", "list"]
+
+  # Workloads: Deployments, ReplicaSets, StatefulSets, DaemonSets (Read-Only)
+  - apiGroups: ["apps"]
+    resources:
+      - deployments
+      - deployments/status
+      - replicasets
+      - replicasets/status
+      - statefulsets
+      - statefulsets/status
+      - daemonsets
+      - daemonsets/status
+    verbs: ["get", "list", "watch"]
+
+  # Batch workloads (Read-Only)
+  - apiGroups: ["batch"]
+    resources:
+      - jobs
+      - cronjobs
+    verbs: ["get", "list", "watch"]
+
+  # Autoscaling (Read-Only)
+  - apiGroups: ["autoscaling"]
+    resources:
+      - horizontalpodautoscalers
+    verbs: ["get", "list", "watch"]
+
+  # Networking discovery (Read-Only)
+  - apiGroups: ["discovery.k8s.io"]
+    resources:
+      - endpointslices
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: k8s-agent-readonly-binding
+  labels:
+    app.kubernetes.io/name: k8s-agent
+subjects:
+  - kind: ServiceAccount
+    name: k8s-agent-sa
+    namespace: k8s-agent
+roleRef:
+  kind: ClusterRole
+  name: k8s-agent-readonly
+  apiGroup: rbac.authorization.k8s.io
