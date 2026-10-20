@@ -86,13 +86,12 @@ metadata:
     app.kubernetes.io/name: k8s-agent
     app.kubernetes.io/component: backend
 spec:
-  storageClassName: gp2
+  storageClassName: ebs-gp3
   accessModes:
     - ReadWriteOnce
   resources:
     requests:
       storage: 1Gi
-
 ---
 
 ###############################################################################
