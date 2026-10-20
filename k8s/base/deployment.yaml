@@ -76,6 +76,7 @@ spec:
 ###############################################################################
 # Backend PVC — SQLite persistent storage
 ###############################################################################
+
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -85,11 +86,13 @@ metadata:
     app.kubernetes.io/name: k8s-agent
     app.kubernetes.io/component: backend
 spec:
+  storageClassName: gp2
   accessModes:
     - ReadWriteOnce
   resources:
     requests:
       storage: 1Gi
+
 ---
 
 ###############################################################################
