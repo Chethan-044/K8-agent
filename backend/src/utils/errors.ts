@@ -18,9 +18,10 @@ export class KubernetesError extends AppError {
 
 export class GeminiError extends AppError {
   constructor(message: string, statusCode: number = 502) {
-    super(`Gemini: ${message}`, statusCode);
+    super(message, statusCode);
   }
 }
+export const AiError = GeminiError;
 
 export class ValidationError extends AppError {
   constructor(message: string) {

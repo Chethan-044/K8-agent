@@ -5,7 +5,7 @@ export const config = {
   port: parseInt(process.env.PORT || '3001', 10),
   nodeEnv: process.env.NODE_ENV || 'development',
   kubeconfigPath: process.env.KUBECONFIG || '',
-  geminiModel: process.env.GEMINI_MODEL || 'gemini-flash-latest',
+  geminiModel: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
   geminiBaseUrl: process.env.GEMINI_BASE_URL || 'https://generativelanguage.googleapis.com',
   logTailLines: parseInt(process.env.LOG_TAIL_LINES || '300', 10),
   cors: {

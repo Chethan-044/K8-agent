@@ -32,79 +32,57 @@ export function detectProviderConfig(
   const rawUrl = (url || '').trim().replace(/\/+$/, '');
   const specifiedModel = (model || '').trim();
 
-  // 1. Google Gemini detection
-  const isGoogle =
-    rawUrl.includes('generativelanguage.googleapis.com') ||
-    rawUrl.includes('/v1beta/models') ||
-    rawUrl.includes('/v1/models') ||
-    (!rawUrl && (!apiKey || apiKey.startsWith('AIza')));
+  // 1. Explicit Custom URL provided (Groq, OpenAI, NVIDIA, Ollama, OpenRouter, vLLM, etc.)
+  if (rawUrl && !rawUrl.includes('generativelanguage.googleapis.com')) {
+    let baseUrl = rawUrl;
+    let chatEndpoint = rawUrl;
 
-  if (isGoogle || (!rawUrl && !specifiedModel)) {
-    let baseUrl = 'https://generativelanguage.googleapis.com';
-    let apiVersion: string | undefined = undefined;
-    let modelName = specifiedModel || config.geminiModel || 'gemini-flash-latest';
-
-    if (rawUrl) {
-      // Pattern: {scheme}://{host}/{apiVersion}/models/{modelName}:{action}
-      const match = rawUrl.match(/^(https?:\/\/[^/]+)\/(v[^/]+)\/models\/([^/:]+)/);
-      if (match) {
-        baseUrl = match[1];
-        apiVersion = match[2];
-        if (!specifiedModel) modelName = match[3];
-      } else {
-        const match2 = rawUrl.match(/^(https?:\/\/[^/]+)\/(v[^/]+)\/models\/([^/]+)/);
-        if (match2) {
-          baseUrl = match2[1];
-          apiVersion = match2[2];
-          if (!specifiedModel) modelName = match2[3];
-        } else {
-          baseUrl = rawUrl;
-        }
-      }
+    if (rawUrl.endsWith('/chat/completions')) {
+      baseUrl = rawUrl.replace(/\/chat\/completions$/, '');
+      chatEndpoint = rawUrl;
+    } else {
+      chatEndpoint = `${rawUrl}/chat/completions`;
     }
 
+    // Always respect user's exact model name! Never override with hardcoded models
+    const modelName = specifiedModel || 'gpt-4o-mini';
+
     return {
-      provider: 'gemini',
+      provider: 'openai-compatible',
       baseUrl,
-      chatEndpoint: `${baseUrl}/v1beta/models/${modelName}:generateContent`,
-      apiVersion,
+      chatEndpoint,
       modelName,
     };
   }
 
-  // 2. OpenAI-compatible provider (NVIDIA NIM, OpenAI, Groq, Ollama, OpenRouter, DeepSeek, etc.)
-  let baseUrl = rawUrl;
-  let chatEndpoint = rawUrl;
+  // 2. Google Gemini (either explicit google url, or no url provided)
+  let baseUrl = 'https://generativelanguage.googleapis.com';
+  let apiVersion: string | undefined = undefined;
+  let modelName = specifiedModel || config.geminiModel || 'gemini-2.5-flash';
 
-  if (rawUrl.endsWith('/chat/completions')) {
-    baseUrl = rawUrl.replace(/\/chat\/completions$/, '');
-    chatEndpoint = rawUrl;
-  } else {
-    chatEndpoint = `${rawUrl}/chat/completions`;
-  }
-
-  // Determine appropriate default model for provider if not specified
-  let modelName = specifiedModel;
-  if (!modelName) {
-    if (rawUrl.includes('nvidia.com')) {
-      modelName = 'meta/llama-3.1-70b-instruct';
-    } else if (rawUrl.includes('groq.com')) {
-      modelName = 'llama-3.3-70b-versatile';
-    } else if (rawUrl.includes('openrouter.ai')) {
-      modelName = 'meta-llama/llama-3.1-8b-instruct';
-    } else if (rawUrl.includes('11434') || rawUrl.includes('ollama')) {
-      modelName = 'llama3.2';
-    } else if (rawUrl.includes('openai.com')) {
-      modelName = 'gpt-4o-mini';
+  if (rawUrl) {
+    const match = rawUrl.match(/^(https?:\/\/[^/]+)\/(v[^/]+)\/models\/([^/:]+)/);
+    if (match) {
+      baseUrl = match[1];
+      apiVersion = match[2];
+      if (!specifiedModel) modelName = match[3];
     } else {
-      modelName = 'gpt-4o-mini';
+      const match2 = rawUrl.match(/^(https?:\/\/[^/]+)\/(v[^/]+)\/models\/([^/]+)/);
+      if (match2) {
+        baseUrl = match2[1];
+        apiVersion = match2[2];
+        if (!specifiedModel) modelName = match2[3];
+      } else {
+        baseUrl = rawUrl;
+      }
     }
   }
 
   return {
-    provider: 'openai-compatible',
+    provider: 'gemini',
     baseUrl,
-    chatEndpoint,
+    chatEndpoint: `${baseUrl}/v1beta/models/${modelName}:generateContent`,
+    apiVersion,
     modelName,
   };
 }
@@ -218,7 +196,7 @@ async function callOpenAiCompatible(
       },
     ],
     temperature: 0.2,
-    max_tokens: 4096,
+    max_tokens: 1500,
   };
 
   if (useJsonFormat) {
@@ -291,17 +269,27 @@ export async function testApiKey(
         Object.keys(reqOpts).length > 0 ? reqOpts : undefined
       );
 
-      // Use AbortController to enforce a 15-second timeout.
-      // Without this, if the pod can't reach Google's API (DNS/network),
-      // the request hangs until the ALB kills it → 502.
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 15000);
+      // Enforce a 30-second timeout via Promise.race.
+      // If the pod in a private cluster can't reach Google's API (DNS failure or NAT Gateway blocked),
+      // this guarantees the request returns a clear error instead of hanging until ALB timeout.
+      let timeoutHandle: any;
+      const timeoutPromise = new Promise((_, reject) => {
+        timeoutHandle = setTimeout(() => {
+          const err: any = new Error('Connection to Gemini API timed out');
+          err.name = 'AbortError';
+          reject(err);
+        }, 30000);
+      });
+
       try {
-        await model.generateContent({
-          contents: [{ role: 'user', parts: [{ text: 'Respond with exactly: OK' }] }],
-        } as any);
+        await Promise.race([
+          model.generateContent({
+            contents: [{ role: 'user', parts: [{ text: 'Respond with exactly: OK' }] }],
+          } as any),
+          timeoutPromise,
+        ]);
       } finally {
-        clearTimeout(timeout);
+        clearTimeout(timeoutHandle);
       }
 
       return { valid: true, model: cfg.modelName, provider: 'Google Gemini' };
@@ -309,7 +297,7 @@ export async function testApiKey(
       logger.warn(`Gemini API test failed: ${err.message}`);
       let errorMsg = err.message || 'Invalid API key or Gemini service unavailable';
       if (err.name === 'AbortError' || err.message?.includes('abort')) {
-        errorMsg = 'Connection to Gemini API timed out. Check if the pod has internet/egress access.';
+        errorMsg = 'Connection to Gemini API timed out. If using Gemini, try model "gemini-2.5-flash", or check network egress.';
       } else if (err.message?.includes('ENOTFOUND') || err.message?.includes('getaddrinfo')) {
         errorMsg = 'Cannot resolve generativelanguage.googleapis.com — check DNS and network egress from the pod.';
       } else if (err.message?.includes('ECONNREFUSED') || err.message?.includes('ETIMEDOUT') || err.message?.includes('ECONNRESET')) {
@@ -488,14 +476,14 @@ export async function diagnose(context: DiagnosticContext, userId: string = DEFA
 
     logger.error(`AI API error: ${err.message}`);
 
-    if (err.message?.includes('RATE_LIMIT') || err.message?.includes('429')) {
-      throw new GeminiError('AI rate limit exceeded. Please wait and try again.', 429);
+    if (err.message?.includes('RATE_LIMIT') || err.message?.includes('TPM') || err.message?.includes('tokens per minute') || err.message?.includes('429')) {
+      throw new GeminiError(`AI token/rate limit exceeded: ${err.message}`, 429);
     }
     if (err.message?.includes('API_KEY_INVALID') || err.message?.includes('401') || err.message?.includes('Unauthorized')) {
       throw new GeminiError('Invalid API key or unauthorized. Please verify your credentials.', 401);
     }
 
-    throw new GeminiError(`Failed to get diagnosis from AI provider: ${err.message}`);
+    throw new GeminiError(err.message || 'Failed to get diagnosis from AI provider');
   }
 }
 

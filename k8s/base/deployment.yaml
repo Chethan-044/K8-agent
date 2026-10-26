@@ -11,6 +11,8 @@ metadata:
     app.kubernetes.io/component: backend
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app.kubernetes.io/name: k8s-agent
@@ -24,8 +26,8 @@ spec:
       serviceAccountName: k8s-agent-sa
       containers:
         - name: backend
-          image: chtnnn/agent-k8:backend-latest
-          imagePullPolicy: Always
+          image: k8s-agent-backend:local
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 3001
               protocol: TCP
@@ -41,7 +43,7 @@ spec:
             - name: SESSION_SECRET
               value: "change-this-in-production-k8s-agent-secret"
             - name: GEMINI_MODEL
-              value: "gemini-flash-latest"
+              value: "gemini-2.5-flash"
             - name: LOG_TAIL_LINES
               value: "300"
           volumeMounts:
@@ -82,7 +84,6 @@ metadata:
   name: k8s-agent-data
   namespace: k8s-agent
 spec:
-  storageClassName: ebs-gp3
   accessModes:
     - ReadWriteOnce
   resources:

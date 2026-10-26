@@ -27,7 +27,7 @@ const PRESETS: ProviderPreset[] = [
     id: 'gemini',
     name: 'Google Gemini',
     defaultUrl: 'https://generativelanguage.googleapis.com',
-    defaultModel: 'gemini-flash-latest',
+    defaultModel: 'gemini-2.5-flash',
     placeholderKey: 'AIzaSy...',
     description: 'Google AI Studio / Generative Language API',
   },
